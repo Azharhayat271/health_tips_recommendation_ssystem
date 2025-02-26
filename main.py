@@ -3,9 +3,11 @@ from pydantic import BaseModel
 import joblib
 import numpy as np
 
-# Load the saved models
+# Load the saved models and encoders
 activity_model = joblib.load("activity_model.pkl")
 health_model = joblib.load("health_model.pkl")
+activity_encoder = joblib.load("activity_encoder.pkl")
+health_tip_encoder = joblib.load("health_tip_encoder.pkl")
 
 # Define input data model using Pydantic
 class InputData(BaseModel):
@@ -28,10 +30,14 @@ def predict(data: InputData):
         activity_prediction = activity_model.predict(input_data)[0]
         health_prediction = health_model.predict(input_data)[0]
 
-        # Return predictions
+        # Decode predictions using the LabelEncoders
+        activity_label = activity_encoder.inverse_transform([activity_prediction])[0]
+        health_tip_label = health_tip_encoder.inverse_transform([health_prediction])[0]
+
+        # Return decoded predictions
         return {
-            "activity_prediction": int(activity_prediction),
-            "health_prediction": int(health_prediction)
+            "activity_recommendation": activity_label,
+            "health_tip_recommendation": health_tip_label
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
