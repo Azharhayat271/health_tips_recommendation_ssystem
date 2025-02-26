@@ -1,43 +1,42 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 import joblib
 import numpy as np
 
-# Load trained models
+# Load the saved models
 activity_model = joblib.load("activity_model.pkl")
 health_model = joblib.load("health_model.pkl")
 
-# Load encoders
-activity_encoder = joblib.load("activity_encoder.pkl")
-health_tip_encoder = joblib.load("health_tip_encoder.pkl")
-meal_encoder = joblib.load("meal_encoder.pkl")
+# Define input data model using Pydantic
+class InputData(BaseModel):
+    glucose_level: float
+    age: int
+    bmi: float
+    meal_code: int
 
+# Initialize FastAPI app
 app = FastAPI()
 
+# Prediction endpoint
+@app.post("/predict")
+def predict(data: InputData):
+    try:
+        # Convert input data to numpy array
+        input_data = np.array([[data.glucose_level, data.age, data.bmi, data.meal_code]])
+
+        # Make predictions
+        activity_prediction = activity_model.predict(input_data)[0]
+        health_prediction = health_model.predict(input_data)[0]
+
+        # Return predictions
+        return {
+            "activity_prediction": int(activity_prediction),
+            "health_prediction": int(health_prediction)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Root endpoint
 @app.get("/")
-def home():
+def read_root():
     return {"message": "Welcome to the Health Recommendation API!"}
-
-@app.post("/predict/")
-def predict(glucose: float, age: int, bmi: float, meal_status: str):
-    # Encode meal status
-    meal_code = meal_encoder.transform([meal_status])[0]
-    
-    # Prepare input data
-    input_data = np.array([[glucose, age, bmi, meal_code]])
-    
-    # Make predictions
-    activity_prediction = activity_model.predict(input_data)[0]
-    health_prediction = health_model.predict(input_data)[0]
-    
-    # Decode predictions
-    predicted_activity = activity_encoder.inverse_transform([activity_prediction])[0]
-    predicted_health_tip = health_tip_encoder.inverse_transform([health_prediction])[0]
-    
-    return {
-        "Predicted Activity": predicted_activity,
-        "Predicted Health Tip": predicted_health_tip
-    }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
